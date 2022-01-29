@@ -122,6 +122,94 @@ def serialize_exchange_diff(diff):
         result = '(' + str(diff)[1:] + ' <img draggable="false" data-mce-resize="false" data-mce-placeholder="1" data-wp-emoji="1" class="emoji" alt="<img draggable="false" data-mce-resize="false" data-mce-placeholder="1" data-wp-emoji="1" class="emoji" alt="<img draggable="false" data-mce-resize="false" data-mce-placeholder="1" data-wp-emoji="1" class="emoji" alt="<img draggable="false" data-mce-resize="false" data-mce-placeholder="1" data-wp-emoji="1" class="emoji" alt="<img draggable="false" data-mce-resize="false" data-mce-placeholder="1" data-wp-emoji="1" class="emoji" alt="↘️" src="https://s.w.org/images/core/emoji/2.3/svg/2198.svg">" src="https://s.w.org/images/core/emoji/2.3/svg/2198.svg">" src="https://s.w.org/images/core/emoji/2.3/svg/2198.svg">" src="https://s.w.org/images/core/emoji/72x72/2198.png">" src="https://s.w.org/images/core/emoji/72x72/2198.png">)'
     return result
 
+
+@bot.callback_query_handler(func=lambda call: True)
+def iq_callback(query):
+    data = query.data
+    if data.startswith('get-'):
+        get_ex_callback(query)
+    else:
+        try:
+            if json.loads(data)['t'] == 'u':
+                edit_message_callback(query)
+        except ValueError:
+            pass
+
+
+def edit_message_callback(query):
+    data = json.loads(query.data)['e']
+    exchange_now = pb.get_exchange(data['c'])
+    text = serialize_ex(
+        exchange_now,
+        get_exchange_diff(
+            get_ex_from_iq_data(data),
+            exchange_now
+        )
+    ) + '\n' + get_edited_signature()
+    if query.message:
+        bot.edit_message_text(
+            text,
+            query.message.chat.id,
+            query.message.message_id,
+            reply_markup=get_update_keyboard(exchange_now),
+            parse_mode='HTML'
+        )
+    elif query.inline_message_id:
+        bot.edit_message_text(
+            text,
+            inline_message_id=query.inline_message_id,
+            reply_markup=get_update_keyboard(exchange_now),
+            parse_mode='HTML'
+        )
+
+
+def get_ex_from_iq_data(exc_json):
+    return {
+        'buy': exc_json['b'],
+        'sale': exc_json['s']
+    }
+
+
+def get_exchange_diff(last, now):
+    return {
+        'sale_diff': float("%.6f" % (float(now['sale']) - float(last['sale']))),
+        'buy_diff': float("%.6f" % (float(now['buy']) - float(last['buy'])))
+    }
+
+
+def get_edited_signature():
+    return '<i>Updated ' + \
+           str(datetime.datetime.now(P_TIMEZONE).strftime('%H:%M:%S')) + \
+           ' (' + TIMEZONE_COMMON_NAME + ')</i>'
+
+
+@bot.inline_handler(func=lambda query: True)
+def query_text(inline_query):
+    bot.answer_inline_query(
+        inline_query.id,
+        get_iq_articles(pb.get_exchanges(inline_query.query))
+    )
+
+
+def get_iq_articles(exchanges):
+    result=[]
+    for exc in exchanges:
+        result.append(
+            telebot.types.InlineQueryResultArticle(
+                id=exc['ccy'],
+                title=exc['ccy'],
+                input_message_content=telebot.types.InputTextMessageContent(
+                    serialize_ex(exc),
+                    parse_mode='HTML'
+                ),
+                reply_markup=get_update_keyboard(exc),
+                description='Convert ' + exc['base_ccy'] + ' -> ' + exc['ccy'],
+                thumb_height=1
+            )
+        )
+    return result
+
+
 bot.polling(none_stop=True)
 
 
