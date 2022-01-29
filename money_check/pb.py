@@ -2,7 +2,7 @@ import re
 import requests
 import json
 
-URL = 'https://api.privatbank.ua/p24api/pubinfo?json&exchange&coursid=5'
+URL = 'https://www.nbrb.by/api/exrates/currencies'
 
 
 def load_exchange():
